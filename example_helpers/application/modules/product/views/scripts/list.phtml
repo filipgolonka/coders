@@ -1,0 +1,13 @@
+<h2>Produkty z kategorii</h2>
+
+<?php foreach($this->products as $product) : ?>
+	<p><?php echo $product['name']; ?></p>
+	<p><?php echo $product['price']; ?></p>
+	<?php echo $this->partial('_partials/showAttributes.phtml', array('baseProduct' => $product)); ?>
+<?php endforeach; ?>
+
+<ul id="pagination">
+	<li>12</li>
+	<li>24</li>
+	<li>48</li>
+</ul>

@@ -1,0 +1,4 @@
+<h2><?php echo $this->product['name']; ?></h2>
+<p><?php echo $this->product['price']; ?></p>
+
+<?php echo $this->partial('_partials/showAttributes.phtml', array('baseProduct' => $this->product));
