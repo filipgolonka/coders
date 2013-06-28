@@ -1,0 +1,265 @@
+<?php if ($this->boxname == 'Lista kategorii'): ?>
+<?php 
+    $customerId = (int) ModelUser::getCustomerId();
+    $groupId    = (int) $this->getRequestParam('groupId');
+    
+    $table = Doctrine::getTable('EisProductGroup');
+    /* @var $tree Doctrine_Tree_NestedSet */
+    $tree = $table->getTree();
+
+    $groupObj = null;
+    $groupNode = null;
+    if (null !== $groupId) {
+        if ($groupObj = $table->find($groupId)) {
+            /* @var $groupNode Doctrine_Node_NestedSet */
+            $groupNode = $groupObj->getNode();
+        }
+    }
+
+    $tree->resetBaseQuery();
+    $query = $tree->getBaseQuery();
+    $query->addOrderBy('pgr_name');
+    $query = product_Model_Default::setupQueryForNavigation($query, $customerId);
+
+    $tree->setBaseQuery($query);
+    $collection = $tree->fetchRoots();
+
+    // kolejnośc taka jak w ustawieniach asortymentu
+    $oEicProductAssortimentMarks =  new EicProductAssortimentMarks();
+    $assortimentSettings = $oEicProductAssortimentMarks->getAllMarks(false, null, true);
+    $order = array();
+    $counter = 0;
+
+    foreach($assortimentSettings as $settings) {
+        if ($settings['pam_order'] > 0) {
+            $order[$settings['fk_pgr_id']] = $settings['pam_order'];
+            $counter++;
+        }
+    }
+
+    $aCollecion = array();
+    foreach ($collection as $record) {
+        if (isset($order[$record->pgr_id])) {
+            $aCollecion[$order[$record->pgr_id]] = $record;
+        }
+        else {
+            $counter++;
+            $aCollecion[$counter] = $record;
+        }
+    }
+       
+    $maxCounter = $counter;
+    /* @var $url Zend_View_Helper_Url */
+    $url = $this->getHelper('Url');
+    $counter = 0;
+    $result = null;
+    if ($num = count($collection)) {
+        $result = '<ul class="tree">';
+        $i = 1;
+        while($i <= $maxCounter) {
+            if (isset($aCollecion[$i])) {
+                $record = $aCollecion[$i];
+
+                $urlParams = array(
+                    'groupId' => $record->pgr_id,
+                    'groupUrlName' => str_replace('/', '-', $record->pgr_name)
+                );
+                $href = $url->url($urlParams, 'product_group_list', true);
+                $class = ($groupId == $record->pgr_id) ? 'active' : '';
+                $counter++;
+
+                if ($counter == $num) {
+                    $class .= 'last';
+                }
+                $result .= '<li>';
+                $logo = null;
+                $result .= sprintf('<a href="%s" class="%s">%s</a>', $href, $class, $logo);
+
+                /* @var $node Doctrine_Node_NestedSet */
+                $node = $record->getNode();
+
+                if (null !== $groupNode) {
+                    if ($groupNode->isDescendantOfOrEqualTo($record)) {
+                        $childrens = $node->getChildren();
+                        if ($childrens && count($childrens) > 0) {
+                            $result .= '<ul>';
+                            foreach ($childrens as $record) {
+                                $urlParams = array(
+                                    'groupId' => $record->pgr_id,
+                                    'groupUrlName' => str_replace('/', '-', $record->pgr_name)
+                                );
+                                $href = $url->url($urlParams, 'product_group_list', true);
+                                $class = ($groupId == $record->pgr_id) ? 'active' : '';
+
+                                $result .= '<li>';
+                                $result .= sprintf('<a href="%s" class="%s">%s</a>', $href, $class, $record->pgr_name);
+
+                                /* @var $node Doctrine_Node_NestedSet */
+                                $node = $record->getNode();
+                                if ($groupNode->isDescendantOfOrEqualTo($record)) {
+                                    $childrens2 = $node->getChildren();
+                                    if ($childrens2 && count($childrens2) > 0) {
+                                        $result .= '<ul>';
+                                        foreach ($childrens2 as $record) {
+                                            $urlParams = array(
+                                                'groupId' => $record->pgr_id,
+                                                'groupUrlName' => str_replace('/', '-', $record->pgr_name)
+                                            );
+                                            $href = $url->url($urlParams, 'product_group_list', true);
+                                            $class = ($groupId == $record->pgr_id) ? 'active' : '';
+
+                                            $result .= '<li>';
+                                            $result .= sprintf('<a href="%s" class="%s">%s</a>', $href, $class, $record->pgr_name);
+                                            $result .= '</li>';
+                                        }
+                                        $result .= '</ul>';
+                                    }
+                                    $result .= '</li>';
+                                }
+                            }
+                            $result .= '</ul>';
+                        }
+                        $result .= '</li>';
+                    }
+                }
+            }
+            $i++;
+        }
+        $result .= '</ul>';
+    }
+        
+    $tree->resetBaseQuery(); // juz nie potrzebuję specjalnych ustawień query
+?>
+<?php if ($result):?>  
+<div class="box mb5">
+    <div class="bottom">
+        <div class="top">
+            <?php print $result; ?>
+        </div>
+    </div>
+</div>
+<?php endif;?>
+
+<?php elseif ($this->boxname == 'Moje konto - menu z lewej'): ?>
+<div class="box mb5">
+    <div class="bottom">
+        <div class="top">
+            <ul class="tree">
+                <?php $first  = true; ?>
+                <?php foreach ($this->links as $link): ?>
+                    <li
+                        <?php if($first): ?>
+                            class="first-child"
+                            <?php $first = false ?>
+                        <?php endif; ?>
+                    ><a <?php echo (isset($link['class'])) ? 'class="ajaxDialogNoModel"' : '' ?>
+                        href="<?php echo '/'.$this->userLocale.$link['url'] ?>"><?php echo $this->translate($link['title']) ?></a></li>
+                <?php endforeach; ?>
+                <!-- sprawdzanie uprawnień do akcji-->
+                <?php /* wylaczam - nie ma na makietach<li>
+                    <?php if ($this->hasAccess('frontend', 'account_customers_list')): ?>
+                        <a href="<?php echo $this->url(array('action' => 'customers'), 'user_account', true); ?>">
+                            <?php echo $this->translate('user_account_customers_list'); ?>
+                        </a>
+                    <?php endif; ?>
+                </li>*/ ?>
+                <?php /*
+                <li>
+                    <?php if ($this->hasAccess('frontend', 'account_customer_salons')): ?>
+                        <a href="<?php echo $this->url(array('action' => 'salons'), 'user_account', true); ?>">
+                            <?php echo $this->translate('user_account_salons_list'); ?>
+                        </a>
+                    <?php endif; ?>
+                </li>
+                <?php if ($this->hasAccess('frontend', 'account_customer_distributors')): ?>
+                    <li>
+                            <a href="<?php echo $this->url(array('action' => 'distributors'), 'user_account', true); ?>">
+                                <?php echo $this->translate('user_account_distributors_list'); ?>
+                            </a>
+                    </li>
+                <?php endif; ?>
+                */ ?>
+                
+                <?php if ($this->hasAccess('frontend', 'account_addresses')): ?>
+                    <li>
+                        <a href="<?php echo $this->url(array('action' => 'deliveryaddresses'), 'user_account', true); ?>">
+                            <?php echo $this->translate('user_account_addresses_list'); ?>
+                        </a>
+                    </li>
+                <?php endif; ?>
+                
+                <?php if ($this->hasAccess('frontend', 'account_users_list')): ?>
+                    <li>
+                        <a href="<?php echo $this->url(array('action' => 'list'), 'user_account', true); ?>">
+                            <?php echo $this->translate('menu_users'); ?>
+                        </a>
+                    </li>
+                <?php endif; ?>
+                
+                <?php /* fgolonka - wylaczam, nie ma na makietach
+                <?php if ($this->hasAccess('frontend', 'account_pricecard_list')): ?>
+                    <li>
+                        <a href="<?php echo $this->url(array('action' => 'pricecard'), 'user_account', true); ?>">
+                            <?php echo $this->translate('price_card_list'); ?>
+                        </a>
+                    </li>
+                <?php endif; ?>*/ ?>
+                    
+                <?php if ($this->hasAccess('frontend', 'account_contact_form')): ?>
+                    <li>
+                        <a href="<?php echo $this->url(array('action' => 'sendcontactform'), 'user_account', true); ?>">
+                            <?php echo $this->translate('user_account_contact_form'); ?>
+                        </a>
+                    </li>
+                <?php endif; ?>
+                
+                <?php if ($this->hasAccess('frontend', 'account_customer_settings')): ?>
+                    <li>
+                        <a href="<?php echo $this->url(array('action' => 'customersettings'), 'user_account', true); ?>">
+                            <?php echo $this->translate('user_account_customer_settings'); ?>
+                        </a>
+                    </li>
+                <?php endif; ?>
+                    
+                <?php if ($this->hasAccess('frontend', 'account_editpass')): ?>
+                    <li>
+                        <a href="<?php echo $this->url(array('action' => 'editpass'), 'user_account', true); ?>">
+                            <?php echo $this->translate('who_change_pass') ?>
+                        </a>
+                    </li>
+                <?php endif; ?>
+                
+                <?php if ($this->hasAccess('frontend', 'account_customer_report_collection') && EisReportUsers::checkHasReportAccess(ModelUser::getInstance()->getUserId())): ?>
+                    <li>
+                        <a href="<?php echo $this->url(array('action' => 'collection'), 'user_report', true); ?>">
+                            <?php echo $this->translate('user_account_customer_report'); ?>
+                        </a>
+                    </li>
+                <?php endif; ?>
+            </ul>
+        </div>
+    </div>
+</div>
+<?php else: ?>
+<div class="box mb5">
+    <div class="bottom">
+        <div class="top">
+             <h2 class="sifr" ><?php echo $this->boxname ?></h2>
+            <ul class="tree">
+                <?php
+                    $first  = true;
+                ?>
+                <?php foreach ($this->links as $link): ?>
+                    <li
+                        <?php if($first): ?>
+                            class="first-child"
+                            <?php $first = false ?>
+                        <?php endif; ?>
+                    ><a <?php echo (isset($link['class'])) ? 'class="ajaxDialogNoModel"' : '' ?>
+                        href="<?php if (!strstr($link['url'], $this->userLocale)) echo $this->userLocale.$link['url']; else echo $link['url']; ?>"><?php echo $this->translate($link['title']) ?></a></li>
+                <?php endforeach; ?>
+             </ul>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
